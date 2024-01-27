@@ -6,7 +6,7 @@ OpenShift supports multitenant clusters. This means that OpenShift supports many
 To support collaboration with others on your projects, you need to grant other users access to them. Access permissions can be granted at varying levels 
 depending on what the given user needs to be able to do in your project.
 
-In the > Steps that follow you will learn how other users can collaborate with you. The place to start is with creating another user named user1.
+In the Step that follow you will learn how other users can collaborate with you. The place to start is with creating another user named user1.
 
 Creating a new user at the command line
 > Step 1: Run the following command to create a new user with the username user1 and the password user1.
@@ -27,7 +27,7 @@ oc get projects
 ```
 You'll receive the following output:
 
->No resources found
+> No resources found
 
 OpenShift reports that there are no resources associated with user1. Thus, you can infer that there are no projects or applications associated with user1.
 
@@ -84,12 +84,14 @@ Let's take a look.
 
 > Step 7: Run the following command at the terminal prompt to get a list of the projects that user1 is entitled to see. (Remember you are logged in as 
 user1 in the terminal window.)
-
+```
 oc get projects
+```
 You'll get the following output:
-
+```
 NAME        DISPLAY NAME   STATUS
 myproject   myproject      Active
+```
 As you can see, user1 now has access to the project created by the developer user.
 
 In this case you gave user1 the role type edit in the project. This allows the user to perform tasks within the project with the exception of tasks related 
@@ -118,20 +120,17 @@ oc new-project yourproject
 ```
 You'll get the following output:
 
-> Now using project "yourproject" on server "https://api.crc.testing:6443".
-
+```
+Now using project "yourproject" on server "https://api.crc.testing:6443".
 You can add applications to this project with the 'new-app' command. For example, try:
-```
     oc new-app rails-postgresql-example
-```
 to build a new example application in Ruby. Or use kubectl to deploy a simple Kubernetes application:
-
-```
 kubectl create deployment hello-node --image=k8s.gcr.io/serve_hostname
 ```
 > Step 10: Run the following command to assign view permissions to the user developer.
 ```
-oc adm policy add-role-to-user view developer -n yourproject```
+oc adm policy add-role-to-user view developer -n yourproject
+```
 You'll get the following output:
 
 > clusterrole.rbac.authorization.k8s.io/view added: "developer"
@@ -140,7 +139,8 @@ Confirming new permission assignment for developer at the command line
 
 > Step 11: Run the following command to log back into the terminal as the user named Developer.
 ```
-oc login -u developer -p developer```
+oc login -u developer -p developer
+```
 You'll get the following output:
 
 > Login successful.
