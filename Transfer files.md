@@ -12,7 +12,7 @@ Work with a Persistent Volume and Persistent Volume claim independent of a conta
 You use the concepts and techniques covered in this track when you want to manually or automatically synchronize changes in the files on a 
 local machine with containers in an OpenShift cluster and vice versa.
 
-### Creating an Initial Project
+### Creating an Initial Project and transfer files from container to local
 login
 ```
 oc login -u admin -p admin https://api.crc.testing:6443 --insecure-skip-tls-verify=true
@@ -207,19 +207,239 @@ the --exclude and --include options to specify patterns to match against directo
 > If there is more than one container running within a pod, you will need to specify 
 which container you want to work with by using the --container option.
 
-###
+Commands:
+```
+oc login -u admin -p admin https://api.crc.testing:6443 --insecure-skip-tls-verify=true
+oc new-project myproject
+oc new-app quay.io/openshiftlabs/simplemessage:1.0 --name simplemessage
+oc rollout status deployment/simplemessage
+oc get pods --selector deployment=simplemessage
+POD=$(oc get pods --selector deployment=simplemessage -o custom-columns=NAME:.metadata.name --no-headers); echo $POD
+export APP_ROUTE=`oc get route simplemessage -n myproject -o jsonpath='{"http://"}{.spec.host}'` && echo $APP_ROUTE
+oc expose service/simplemessage
+export APP_ROUTE=`oc get route simplemessage -n myproject -o jsonpath='{"http://"}{.spec.host}'` && echo $APP_ROUTE
+oc rsh $POD
+exit
+oc rsync $POD:/opt/app-root/src/message.txt .
+```
+### Uploading files to a container
+Console:
+```
+[root@crc-rwwzd-master-0 /]# POD=$(oc get pods --selector deployment=simplemessage -o custom-columns=NAME:.metadata.name --no-headers); echo $POD
+simplemessage-6c7f4d74bb-42dj9
+[root@crc-rwwzd-master-0 /]# oc rsync ./local/dir <pod-name>:/remote/dir
+bash: pod-name: No such file or directory
+[root@crc-rwwzd-master-0 /]# cd /tmp
+[root@crc-rwwzd-master-0 tmp]# echo 'OpenShift really, really, really rocks!!!!' > message.txt
+[root@crc-rwwzd-master-0 tmp]# cat message.txt
+OpenShift really, really, really rocks!!!!
+[root@crc-rwwzd-master-0 tmp]# oc rsync . $POD:/opt/app-root/src --exclude=* --include=message.txt --no-perms
+sending incremental file list
+message.txt
+
+sent 158 bytes  received 41 bytes  398.00 bytes/sec
+total size is 43  speedup is 0.22
+[root@crc-rwwzd-master-0 tmp]# export APP_ROUTE=`oc get route simplemessage -n myproject -o jsonpath='{"http://"}{.spec.host}'` && echo $APP_ROUTE
+http://simplemessage-myproject.crc-rwwzd-master-0.crc.7uwxyvx4rvok.instruqt.io
+```
+Commands:
+```
+POD=$(oc get pods --selector deployment=simplemessage -o custom-columns=NAME:.metadata.name --no-headers); echo $POD
+oc rsync ./local/dir <pod-name>:/remote/dir
+cd /tmp
+echo 'OpenShift really, really, really rocks!!!!' > message.txt
+cat message.txt
+oc rsync . $POD:/opt/app-root/src --exclude=* --include=message.txt --no-perms
+export APP_ROUTE=`oc get route simplemessage -n myproject -o jsonpath='{"http://"}{.spec.host}'` && echo $APP_ROUTE
+```
+
+### Synchronizing files with a container
+
+Console:
+```
+[root@crc-rwwzd-master-0 /]# POD=$(oc get pods --selector deployment=simplemessage -o custom-columns=NAME:.metadata.name --no-headers) && echo $POD
+simplemessage-6c7f4d74bb-42dj9
+[root@crc-rwwzd-master-0 /]# cd /tmp
+[root@crc-rwwzd-master-0 tmp]# oc rsync . $POD:/opt/app-root/src --no-perms --watch > /dev/null2>&1 &
+[1] 119077
+[root@crc-rwwzd-master-0 tmp]# pwd
+/tmp
+[root@crc-rwwzd-master-0 tmp]# cat message.txt
+OpenShift really, really, really rocks!!!!
+[root@crc-rwwzd-master-0 tmp]# echo 'I like OpenShift!' > message.txt
+[root@crc-rwwzd-master-0 tmp]# cat message.txt
+I like OpenShift!
+[root@crc-rwwzd-master-0 tmp]# export APP_ROUTE=`oc get route simplemessage -n myproject -o jsonpath='{"http://"}{.spec.host}'` && echo $APP_ROUTE
+http://simplemessage-myproject.crc-rwwzd-master-0.crc.7uwxyvx4rvok.instruqt.io
+```
+Commands:
+```
+POD=$(oc get pods --selector deployment=simplemessage -o custom-columns=NAME:.metadata.name --no-headers) && echo $POD
+cd /tmp
+oc rsync . $POD:/opt/app-root/src --no-perms --watch > /dev/null 2>&1 &
+pwd
+cat message.txt
+echo 'I like OpenShift!' > message.txt
+cat message.txt
+export APP_ROUTE=`oc get route simplemessage -n myproject -o jsonpath='{"http://"}{.spec.host}'` && echo $APP_ROUTE
+```
+
+### Copying files to a Persistent Volume
+A persistent volume is similar to a mounted drive under Linux, in that it has a lifecycle independent of any individual pod that uses the persistent volume. 
+The process for using a persistent volume is that an administrator creates it. Then, a developer creates a persistent volume claim to reserve space on the 
+persistent volume for their application.
+
+Here you will create a create a dummy application using oc new-app, and use the oc set volume command to create a persistent volume and mount it into the file 
+system 0f the dummy application. Then, you can use use oc rsync to copy files into a persistent volume. All you need to do is supply the mounting path to the 
+persistent volume in the container's file system.
+
+You can now copy any files into the persistent volume using the /mnt directory as the target. 
+Remember: The /mnt directory is where you mounted the persistent volume as the target directory.
+
+#### Creating the dummy application
+```
+[root@crc-rwwzd-master-0 /]# oc new-app centos/httpd-24-centos7 --name dummy
+--> Found container image 5ae4c76 (2 years old) from Docker Hub for "centos/httpd-24-centos7"
+
+    Apache httpd 2.4
+    ----------------
+    Apache httpd 2.4 available as container, is a powerful, efficient, and extensible web server. Apache supports a variety of features, many implemented as compiled modules which extend the core functionality. These can range from server-side programming language support to authentication schemes. Virtual hosting allows one Apache installation to serve many different Web sites.
+
+    Tags: builder, httpd, httpd24
+
+    * An image stream tag will be created as "dummy:latest" that will track this image
+
+--> Creating resources ...
+    imagestream.image.openshift.io "dummy" created
+Warning: would violate PodSecurity "restricted:v1.24": allowPrivilegeEscalation != false (container "dummy" must set securityContext.allowPrivilegeEscalation=false), unrestricted capabilities(container "dummy" must set securityContext.capabilities.drop=["ALL"]), runAsNonRoot != true (pod or container "dummy" must set securityContext.runAsNonRoot=true), seccompProfile (pod or container "dummy" must set securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost")
+    deployment.apps "dummy" created
+    service "dummy" created
+--> Success
+    Application is not exposed. You can expose services to the outside world by executing one or more of the commands below:
+     'oc expose service/dummy'
+    Run 'oc status' to view your app.
+	
+[root@crc-rwwzd-master-0 /]# oc rollout status deployment/dummy
+deployment "dummy" successfully rolled out
+
+[root@crc-rwwzd-master-0 /]# oc set volume deployment/dummy --add --name=tmp-mount --claim-name=data --type pvc --claim-size=1G --mount-path /mnt
+Warning: would violate PodSecurity "restricted:v1.24": allowPrivilegeEscalation != false (container "dummy" must set securityContext.allowPrivilegeEscalation=false), unrestricted capabilities(container "dummy" must set securityContext.capabilities.drop=["ALL"]), runAsNonRoot != true (pod or container "dummy" must set securityContext.runAsNonRoot=true), seccompProfile (pod or container "dummy" must set securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost")
+deployment.apps/dummy volume updated
+
+[root@crc-rwwzd-master-0 /]# oc rollout status deployment/dummy
+deployment "dummy" successfully rolled out
+
+[root@crc-rwwzd-master-0 /]# oc get pvc
+NAME   STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS                   AGE
+data   Bound    pvc-71da8cfb-3854-4da6-99ad-60ac18e64721   30Gi       RWO            crc-csi-hostpath-provisioner   39s
+```
+#### Creating the environment variable POD
+```
+[root@crc-rwwzd-master-0 /]# POD=$(oc get pods --selector deployment=dummy -o custom-columns=NAME:.metadata.name --no-headers) && echo $POD
+dummy-57bc6796c-bjx2r
+```
+#### Copying a file into the persistent volume
+```
+[root@crc-rwwzd-master-0 /]# cd /opt && mkdir persist && cd persist && pwd
+/opt/persist
+
+[root@crc-rwwzd-master-0 persist]# echo 'I am some data.' > data.txt
+
+[root@crc-rwwzd-master-0 persist]# cat data.txt
+I am some data.
+
+[root@crc-rwwzd-master-0 persist]# oc rsync ./ $POD:/mnt --exclude=* --include=data.txt --no-permssending incremental file list
+data.txt
+
+sent 122 bytes  received 35 bytes  314.00 bytes/sec
+total size is 16  speedup is 0.10
+
+[root@crc-rwwzd-master-0 persist]# oc rsh $POD ls -las /mnt
+total 4
+0 drwxrwsr-x. 2 root       1000660000 22 Jan 27 12:01 .
+0 dr-xr-xr-x. 1 root       root       61 Jan 27 11:59 ..
+4 -rw-r--r--. 1 1000660000 1000660000 16 Jan 27 12:01 data.txt
+```
+#### Unmounting the persistent volume
+```
+[root@crc-rwwzd-master-0 persist]# oc set volume deployment/dummy --remove --name=tmp-mount
+Warning: would violate PodSecurity "restricted:v1.24": allowPrivilegeEscalation != false (container "dummy" must set securityContext.allowPrivilegeEscalation=false), unrestricted capabilities (container "dummy" must set securityContext.capabilities.drop=["ALL"]), runAsNonRoot != true (pod or container "dummy" must set securityContext.runAsNonRoot=true), seccompProfile (pod or container "dummy" must set securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost")
+deployment.apps/dummy volume updated
+
+[root@crc-rwwzd-master-0 persist]# oc rollout status deployment/dummy
+deployment "dummy" successfully rolled out
+
+[root@crc-rwwzd-master-0 persist]# POD=$(oc get pods --selector deployment=dummy -o custom-columns=NAME:.metadata.name --no-headers) && echo $POD
+dummy-6b4f88995d-pjqz6
+
+[root@crc-rwwzd-master-0 persist]# oc rsh $POD ls -las /mnt
+total 0
+0 drwxr-xr-x. 2 root root  6 Apr 11  2018 .
+0 dr-xr-xr-x. 1 root root 61 Jan 27 12:01 ..
+```
+#### Remounting a volume claim
+```
+[root@crc-rwwzd-master-0 persist]# oc set volume deployment/dummy --add --name=tmp-mount --claim-name=data --mount-path /mnt
+Warning: would violate PodSecurity "restricted:v1.24": allowPrivilegeEscalation != false (container "dummy" must set securityContext.allowPrivilegeEscalation=false), unrestricted capabilities (container "dummy" must set securityContext.capabilities.drop=["ALL"]), runAsNonRoot != true (pod or container "dummy" must set securityContext.runAsNonRoot=true), seccompProfile (pod or container "dummy" must set securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost")
+deployment.apps/dummy volume updated
+
+[root@crc-rwwzd-master-0 persist]# POD=$(oc get pods --selector deployment=dummy -o custom-columns=NAME:.metadata.name --no-headers) && echo $POD
+dummy-57bc6796c-m45vf
+
+[root@crc-rwwzd-master-0 persist]# oc rsh $POD ls -las /mnt
+total 4
+0 drwxrwsr-x. 2 root       1000660000 22 Jan 27 12:01 .
+0 dr-xr-xr-x. 1 root       root       61 Jan 27 12:02 ..
+4 -rw-rw-r--. 1 1000660000 1000660000 16 Jan 27 12:01 data.txt
+```
+#### Understanding the independence of a persistent volume and a persistent volume claim
+```
+[root@crc-rwwzd-master-0 persist]# oc delete all --selector deployment=dummy --force
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "dummy-57bc6796c-m45vf" force deleted
+replicaset.apps "dummy-5446444d47" force deleted
+replicaset.apps "dummy-57bc6796c" force deleted
+replicaset.apps "dummy-6b4f88995d" force deleted
+
+[root@crc-rwwzd-master-0 persist]# oc get pvc
+NAME   STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS                  AGE
+data   Bound    pvc-71da8cfb-3854-4da6-99ad-60ac18e64721   30Gi       RWO            crc-csi-hostpath-provisioner   3m37s
+
+```
+Commands:
+```
+#### Creating the dummy application
+oc new-app centos/httpd-24-centos7 --name dummy
+oc rollout status deployment/dummy
+oc set volume deployment/dummy --add --name=tmp-mount --claim-name=data --type pvc --claim-size=1G --mount-path /mnt
+oc rollout status deployment/dummy
+oc get pvc
+#### Creating the environment variable POD
+POD=$(oc get pods --selector deployment=dummy -o custom-columns=NAME:.metadata.name --no-headers) && echo $POD
+#### Copying a file into the persistent volume
+cd /opt && mkdir persist && cd persist && pwd
+echo 'I am some data.' > data.txt
+cat data.txt
+oc rsync ./ $POD:/mnt --exclude=* --include=data.txt --no-perms
+oc rsh $POD ls -las /mnt
+#### Unmounting the persistent volume
+oc set volume deployment/dummy --remove --name=tmp-mount
+oc rollout status deployment/dummy
+POD=$(oc get pods --selector deployment=dummy -o custom-columns=NAME:.metadata.name --no-headers) && echo $POD
+oc rsh $POD ls -las /mnt
+#### Remounting a volume claim
+oc set volume deployment/dummy --add --name=tmp-mount --claim-name=data --mount-path /mnt
+POD=$(oc get pods --selector deployment=dummy -o custom-columns=NAME:.metadata.name --no-headers) && echo $POD
+oc rsh $POD ls -las /mnt
+#### Understanding the independence of a persistent volume and a persistent volume claim
+oc delete all --selector deployment=dummy --force
+oc get pvc
+history
+```
+
+You've just learned how to use the command oc set volume to create a persistent volume and a persistent volume claim automatically.
+You created a dummy application that uses the Persistent Volume Claim.
+You used the oc rsync command to copy files from the local machine into the persistent volume in the application's container.
+Then, you learned how to use the oc set volume command to unmount and remount a persistent volume and a persistent volume claim.
 
 
-###
-
-
-###
-
-
-###
-
-
-###
-
-
-###
