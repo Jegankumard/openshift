@@ -21,9 +21,10 @@ Step 3: Copy the URL displayed in the output from oc get routes and paste it int
 You'll be presented with the login page in the web console as shown in the figure below:
 
 Login
-
+```
 Username: developer
 Password: developer
+```
 Upon successful login, you are presented with a "Getting Started" message and the option of creating a new project.
 
 Step 4: Click the create a Project link as shown in the figure below.
