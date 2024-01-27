@@ -32,6 +32,8 @@ oc whoami
 ```
 You'll get the following output:
 > developer
+
+
 When you are working against multiple OpenShift clusters, you switch between them by using the oc login. You only need to supply the URL for the OpenShift cluster. 
 For example, if you had an account with the Developer Sandbox for OpenShift, you could run something similar:
 ```
